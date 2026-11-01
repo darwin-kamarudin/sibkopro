@@ -14,13 +14,13 @@
  },
  "dependencies": {
   "@tinymce/tinymce-react": "^6.3.0",
+  "exceljs": "^3.4.0",
   "jspdf": "^4.1.0",
   "jspdf-autotable": "^5.0.7",
   "react": "^19.2.0",
   "react-dom": "^19.2.0",
   "react-router-dom": "^7.13.0",
-  "react-to-print": "^3.2.0",
-  "xlsx": "^0.18.5"
+  "react-to-print": "^3.2.0"
  },
  "devDependencies": {
   "@eslint/js": "^9.39.1",
