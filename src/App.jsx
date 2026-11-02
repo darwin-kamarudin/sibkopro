@@ -29,7 +29,7 @@ export default function App() {
     // Data lintas-role & spesifik-role. Masing-masing hook menangani listener
     // Firestore-nya sendiri dan reset otomatis saat role/appUser berubah.
     const allUsers = useAdminUsers(authUser, appUser, () => setLoading(false));
-    const { mySettings, masterPoints, sanctionRules } = useSharedSettings(authUser, appUser);
+    const { mySettings, masterPoints, sanctionRules, tataTertib } = useSharedSettings(authUser, appUser);
     const { students, journals, pointLogs } = useGuruRecords(authUser, appUser, () => setLoading(false));
 
     if (loading) {
@@ -74,6 +74,7 @@ export default function App() {
                                 mySettings={mySettings}
                                 masterPoints={masterPoints}
                                 sanctionRules={sanctionRules}
+                                tataTertib={tataTertib}
                                 onUpdatePassword={handleUpdatePassword}
                             />
                         )}

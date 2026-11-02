@@ -7,7 +7,7 @@ import PointInputModal from './components/PointInputModal';
 import PointHistoryModal from './components/PointHistoryModal';
 
 const PointManager = ({ 
-    students, pointLogs, masterPoints, sanctionRules, settings, 
+    students, pointLogs, masterPoints, sanctionRules, settings, tataTertib, 
     onAddPoint, onUpdatePoint, onDeletePoint, onUpdateStudent 
 }) => {
     // --- STATE ---
@@ -94,13 +94,13 @@ const PointManager = ({
                         onClick={() => setActiveTab('violation')} 
                         className={`flex-1 py-3 text-sm font-bold border-b-4 transition-all flex items-center justify-center gap-2 ${activeTab === 'violation' ? 'border-red-500 text-red-600 bg-red-50/50' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                     >
-                        <AlertTriangle size={18}/> Catat Poin Pelanggaran
+                        <AlertTriangle size={18}/> Catat Pelanggaran
                     </button>
                     <button 
                         onClick={() => setActiveTab('achievement')} 
                         className={`flex-1 py-3 text-sm font-bold border-b-4 transition-all flex items-center justify-center gap-2 ${activeTab === 'achievement' ? 'border-green-500 text-green-600 bg-green-50/50' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                     >
-                        <Trophy size={18}/> Catat Poin Prestasi
+                        <Trophy size={18}/> Catat Prestasi
                     </button>
                 </div>
             </div>
@@ -204,6 +204,7 @@ const PointManager = ({
 
             {/* MODAL INPUT */}
             <PointInputModal 
+                sanctionMode={settings?.sanctionMode || 'poin'}
                 isOpen={isInputModalOpen}
                 onClose={() => setIsInputModalOpen(false)}
                 student={selectedStudent}
@@ -218,12 +219,14 @@ const PointManager = ({
 
             {/* MODAL HISTORY */}
             <PointHistoryModal 
+                sanctionMode={settings?.sanctionMode || 'poin'}
                 isOpen={isHistoryModalOpen}
                 onClose={() => setIsHistoryModalOpen(false)}
                 student={historyStudent}
                 pointLogs={pointLogs}
                 settings={settings}
                 sanctionRules={sanctionRules}
+                tataTertib={tataTertib}
                 onUpdateStudent={handleStudentDataUpdate}
             />
         </div>

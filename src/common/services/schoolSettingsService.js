@@ -10,5 +10,10 @@ export const saveSchoolSettings = (mySettings, teacherId, data) =>
 export const saveMasterPoints = (teacherId, items) =>
     setDoc(doc(db, 'settings', `master_points_${teacherId}`), { items }).then(() => alert("Tersimpan"));
 
+export const saveTataTertib = (teacherId, data) =>
+    setDoc(doc(db, 'settings', `tata_tertib_${teacherId}`), {
+        pasal: data.pasal || [], prestasi: data.prestasi || [], spRules: data.spRules || []
+    }).then(() => alert("Tersimpan"));
+
 export const saveSanctionRules = (teacherId, items) =>
     setDoc(doc(db, 'settings', `sanction_rules_${teacherId}`), { items }).then(() => alert("Tersimpan"));

@@ -4,8 +4,9 @@ import {
     Download, FileUp, Edit, CheckSquare, Square, X, Check 
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import TataTertibSettings from './TataTertibSettings';
 
-const MasterDataSettings = ({ masterPoints, onSavePoints, sanctionRules, onSaveSanctions }) => {
+const MasterDataSettings = ({ masterPoints, onSavePoints, sanctionRules, onSaveSanctions, tataTertib, sanctionMode, onSaveMode, onSaveTataTertib }) => {
     // Tab Utama: 'points' vs 'sanctions'
     const [activeTab, setActiveTab] = useState('points');
     // Sub Tab untuk Poin: 'violation' vs 'achievement'
@@ -254,6 +255,12 @@ const MasterDataSettings = ({ masterPoints, onSavePoints, sanctionRules, onSaveS
                     >
                         <Gavel size={16}/> Aturan Sanksi
                     </button>
+                    <button
+                        onClick={() => setActiveTab('tatatertib')}
+                        className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'tatatertib' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <List size={16}/> Tata Tertib
+                    </button>
                 </div>
             </div>
 
@@ -368,6 +375,16 @@ const MasterDataSettings = ({ masterPoints, onSavePoints, sanctionRules, onSaveS
                         </table>
                     </div>
                 </div>
+            )}
+
+            {/* --- TAB CONTENT 3: TATA TERTIB (PASAL) --- */}
+            {activeTab === 'tatatertib' && (
+                <TataTertibSettings
+                    tataTertib={tataTertib}
+                    sanctionMode={sanctionMode}
+                    onSaveMode={onSaveMode}
+                    onSaveTataTertib={onSaveTataTertib}
+                />
             )}
 
             {/* --- TAB CONTENT 2: SANKSI --- */}

@@ -1,3 +1,4 @@
+import { ensureSignerNips } from '../../../common/utils/signers';
 import React, { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -158,7 +159,8 @@ export const IndividualReportModal = ({ isOpen, onClose, journals = [], students
     };
 
     const handlePreview = () => { try { setPreviewUrl(URL.createObjectURL(createPDFDoc().output('blob'))); } catch(e){} };
-    const handleDownload = () => { createPDFDoc().save(`Rekam_Jejak_${selectedStudent?.name || 'Siswa'}.pdf`); };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; createPDFDoc().save(`Rekam_Jejak_${selectedStudent?.name || 'Siswa'}.pdf`); };
     const toggleSign = (key) => { setSignOptions(p => ({ ...p, [key]: !p[key] })); };
 
     if (!isOpen) return null;
@@ -508,7 +510,8 @@ export const RiskMapReportModal = ({ isOpen, onClose, students = [], pointLogs =
     };
 
     const handlePreview = () => { try { setPreviewUrl(URL.createObjectURL(createPDFDoc().output('blob'))); } catch(e){} };
-    const handleDownload = () => { createPDFDoc().save(`Peta_Kerawanan_${localRisk}.pdf`); };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; createPDFDoc().save(`Peta_Kerawanan_${localRisk}.pdf`); };
     const toggleSign = (key) => { setSignOptions(p => ({ ...p, [key]: !p[key] })); };
 
     if (!isOpen) return null;

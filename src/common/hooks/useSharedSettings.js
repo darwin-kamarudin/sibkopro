@@ -11,6 +11,7 @@ export function useSharedSettings(authUser, appUser) {
     const [mySettings, setMySettings] = useState({});
     const [masterPoints, setMasterPoints] = useState([]);
     const [sanctionRules, setSanctionRules] = useState([]);
+    const [tataTertib, setTataTertib] = useState({ pasal: [], prestasi: [], spRules: [] });
 
     useEffect(() => {
         if (!authUser || !appUser) return;
@@ -30,12 +31,20 @@ export function useSharedSettings(authUser, appUser) {
             (docSnap) => setSanctionRules(docSnap.exists() ? docSnap.data().items : [])
         );
 
+        const unsubTata = onSnapshot(
+            doc(db, 'settings', `tata_tertib_${appUser.id}`),
+            (docSnap) => setTataTertib(docSnap.exists()
+                ? { pasal: docSnap.data().pasal || [], prestasi: docSnap.data().prestasi || [], spRules: docSnap.data().spRules || [] }
+                : { pasal: [], prestasi: [], spRules: [] })
+        );
+
         return () => {
             unsubSettings();
             unsubMaster();
             unsubSanctions();
+            unsubTata();
         };
     }, [authUser, appUser]);
 
-    return { mySettings, masterPoints, sanctionRules };
+    return { mySettings, masterPoints, sanctionRules, tataTertib };
 }

@@ -1,3 +1,4 @@
+import { ensureSignerNips } from '../../../common/utils/signers';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     History, X, Calendar, Printer, Download, ChevronLeft, 
@@ -322,7 +323,8 @@ const CounselingHistoryModal = ({ isOpen, onClose, student, journals, settings, 
     };
 
     const handlePreview = () => { try { const doc = createPDFDoc(); setPreviewUrl(URL.createObjectURL(doc.output('blob'))); } catch (error) { alert(`Gagal preview: ${error.message}`); } };
-    const handleDownload = () => { try { const doc = createPDFDoc(); doc.save(`Riwayat_Konseling_${student.name.replace(/\s+/g, '_')}.pdf`); } catch (error) { alert(`Gagal download: ${error.message}`); } };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; try { const doc = createPDFDoc(); doc.save(`Riwayat_Konseling_${student.name.replace(/\s+/g, '_')}.pdf`); } catch (error) { alert(`Gagal download: ${error.message}`); } };
     const toggleSign = (key) => setSignOptions(prev => ({ ...prev, [key]: !prev[key] }));
 
     return (
@@ -332,7 +334,7 @@ const CounselingHistoryModal = ({ isOpen, onClose, student, journals, settings, 
                 <div>
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-3">
                         {previewUrl ? <FileText size={24} className="text-red-600"/> : <History size={24} className="text-blue-600"/>} 
-                        {previewUrl ? 'Pratinjau PDF' : 'Riwayat Konseling'}
+                        {previewUrl ? 'Pratinjau PDF' : 'Daftar Layanan Konseling'}
                     </h3>
                     <p className="text-sm text-slate-500 mt-1"><span className="font-bold text-slate-700">{student.name}</span> • {student.class}</p>
                 </div>

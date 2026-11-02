@@ -1,9 +1,9 @@
-import { addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, getCollectionRef } from '../../common/config/firebase';
 import { COLLECTION_PATHS } from '../../common/utils/constants';
 
 export const addJournal = (teacherId, data) =>
-    addDoc(getCollectionRef(COLLECTION_PATHS.journals), { ...data, teacherId });
+    addDoc(getCollectionRef(COLLECTION_PATHS.journals), { ...data, teacherId, createdAt: serverTimestamp(), createdAtMs: Date.now() });
 
 export const updateJournal = (id, data) =>
     updateDoc(doc(db, COLLECTION_PATHS.journals, id), data);

@@ -7,8 +7,12 @@ import {
 } from 'lucide-react';
 import PointHistoryModal from '../points/components/PointHistoryModal';
 import SanctionDetailModal from './components/SanctionDetailModal';
+import { hitungStatusPasal, severityPasal, spIndex } from '../../common/utils/tataTertib';
 
-const SanctionBook = ({ students, pointLogs, sanctionRules, settings }) => {
+const SanctionBook = ({ students, pointLogs, sanctionRules, settings, tataTertib, sanctionMode = 'poin' }) => {
+    const isPasal = sanctionMode === 'pasal';
+    const tataPasal = tataTertib?.pasal || [];
+    const tataSp = tataTertib?.spRules || [];
     const navigate = useNavigate();
     
     // State Filter
@@ -32,6 +36,32 @@ const SanctionBook = ({ students, pointLogs, sanctionRules, settings }) => {
 
         const data = students.map(student => {
             const studentLogs = pointLogs.filter(l => l.studentId === student.id);
+
+            // ---- MODE PASAL: status dari akumulasi pasal & ambang SP ----
+            if (isPasal) {
+                const st = hitungStatusPasal(studentLogs, tataPasal, tataSp);
+                const sev = severityPasal(st);
+                const prestasiCount = studentLogs.filter(l => l.type === 'achievement').length;
+                const label = st.spTercapai
+                    ? `${st.spTercapai.level}${st.spTercapai.tindakan ? ': ' + st.spTercapai.tindakan : ''}`
+                    : (st.totalPelanggaran > 0 ? 'Belum mencapai SP' : 'Siswa Taat Aturan');
+                const rekom = st.rekomendasi.length ? st.rekomendasi.join(' | ') : 'Pertahankan prestasi.';
+                return {
+                    ...student,
+                    netScore: spIndex(st.spTercapai?.level) * 1000 + st.efektif.berat * 100 + st.efektif.sedang * 10 + st.efektif.ringan,
+                    violationTotal: st.totalPelanggaran,
+                    achievementTotal: prestasiCount,
+                    violationCount: st.totalPelanggaran,
+                    lastViolationDate: studentLogs
+                        .filter(l => l.type === 'violation')
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.date || null,
+                    activeRule: { penalty: label, action: rekom, min: 0, max: 0 },
+                    activeSanction: label,
+                    sanctionRange: `R${st.efektif.ringan} / S${st.efektif.sedang} / B${st.efektif.berat}`,
+                    pasalStatus: st,
+                    severity: sev
+                };
+            }
             
             const vTotal = studentLogs
                 .filter(l => l.type === 'violation')
@@ -86,7 +116,7 @@ const SanctionBook = ({ students, pointLogs, sanctionRules, settings }) => {
             .sort((a, b) => b.netScore - a.netScore);
 
         return { classes, students: filtered };
-    }, [students, pointLogs, sanctionRules, searchTerm, selectedClass, statusFilter]);
+    }, [students, pointLogs, sanctionRules, tataPasal, tataSp, isPasal, searchTerm, selectedClass, statusFilter]);
 
     // --- Pagination ---
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -139,13 +169,13 @@ const SanctionBook = ({ students, pointLogs, sanctionRules, settings }) => {
                 <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
                     <div className="bg-red-50 border border-red-100 px-3 py-2 rounded-lg text-center">
                         <span className="block text-lg font-bold text-red-600">
-                            {processedData.students.filter(s => s.netScore >= 50).length}
+                            {processedData.students.filter(s => isPasal ? s.severity === 'critical' : s.netScore >= 50).length}
                         </span>
                         <span className="text-[10px] text-red-400 font-bold uppercase">Kritis</span>
                     </div>
                     <div className="bg-orange-50 border border-orange-100 px-3 py-2 rounded-lg text-center">
                         <span className="block text-lg font-bold text-orange-600">
-                            {processedData.students.filter(s => s.netScore > 0 && s.netScore < 50).length}
+                            {processedData.students.filter(s => isPasal ? (s.severity === 'warning' || s.severity === 'danger') : (s.netScore > 0 && s.netScore < 50)).length}
                         </span>
                         <span className="text-[10px] text-orange-400 font-bold uppercase">Pelanggar</span>
                     </div>
@@ -347,6 +377,9 @@ const SanctionBook = ({ students, pointLogs, sanctionRules, settings }) => {
 
             {/* MODALS */}
             <PointHistoryModal 
+                reportKind="pelanggaran"
+                sanctionMode={sanctionMode}
+                tataTertib={tataTertib}
                 isOpen={!!selectedStudentForHistory}
                 onClose={() => setSelectedStudentForHistory(null)}
                 student={selectedStudentForHistory}

@@ -48,28 +48,35 @@ const Layout = ({ children, userRole, userName, onLogout }) => {
         : [
             { id: 'dashboard', label: 'Dashboard', icon: Home, path: '/' },
             { id: 'journal', label: 'Catat Layanan', icon: BookOpen, path: '/journal' },
-            { id: 'students', label: 'Data Siswa', icon: Users, path: '/students' },
             
+            // GRUP REKAM JEJAK SISWA
+            { 
+                id: 'rekam_jejak', label: 'Rekam Jejak Siswa', icon: BookUser, 
+                children: [
+                    { id: 'points', label: 'Catat Rekam Jejak', icon: Trophy, path: '/points' }, 
+                    { id: 'point_book', label: 'Buku Siswa', icon: BookUser, path: '/point-book' },
+                    { id: 'achievement_book', label: 'Buku Prestasi Siswa', icon: Trophy, path: '/achievement-book' },
+                    { id: 'sanction_book', label: 'Buku Sanksi Siswa', icon: Gavel, path: '/sanction-book' },
+                ]
+            }, 
+
             // GROUP LAYANAN BK
             { 
-                id: 'bk_services', label: 'BK Tools', icon: Briefcase, 
+                id: 'bk_services', label: 'SIBKo Tools', icon: Briefcase, 
                 children: [
                     { id: 'presensi', label: 'Presensi Siswa', icon: Clock, path: '/presensi' },
-                    { id: 'points', label: 'Catat Poin Siswa', icon: Trophy, path: '/points' }, 
-                    { id: 'point_book', label: 'Buku Poin Siswa', icon: BookUser, path: '/point-book' },
-                    { id: 'sanction_book', label: 'Buku Sanksi Siswa', icon: Gavel, path: '/sanction-book' },
-                    { id: 'counseling_history', label: 'Riwayat Konseling', icon: ClipboardList, path: '/counseling-history' },
                     { id: 'letters', label: 'Pembuatan Surat', icon: Mail, path: '/letters' },
                 ]
             },
             
             { id: 'reports', label: 'Cetak Laporan', icon: Printer, path: '/reports' },
 
-            // GROUP MASTER DATA
+                // GROUP MASTER DATA
             { 
                 id: 'master_data', label: 'Master Data', icon: Database, 
                 children: [
-                    { id: 'master_points', label: 'Master Poin & Sanksi', icon: List, path: '/master-points' }, 
+                    { id: 'students', label: 'Data Siswa', icon: Users, path: '/students' },
+                    { id: 'master_points', label: 'Poin & Sanksi', icon: List, path: '/master-points' }, 
                 ]
             }, 
 

@@ -1,3 +1,7 @@
+import { ensureSignerNips } from '../../common/utils/signers';
+import PdfPreviewModal from '../../common/components/PdfPreviewModal';
+import { buildBukuSiswaPdf } from './bukuSiswaPdf';
+import { hitungStatusPasal, KATEGORI_LABEL } from '../../common/utils/tataTertib';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
@@ -127,7 +131,8 @@ const PrintPreviewModal = ({ isOpen, onClose, title, children }) => {
 // ==========================================
 // 2. KOMPONEN UTAMA
 // ==========================================
-const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRules }) => {
+const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRules, sanctionMode = 'poin', tataTertib }) => {
+    const isPasal = sanctionMode === 'pasal';
     const [selectedStudentId, setSelectedStudentId] = useState('');
     const [showPreview, setShowPreview] = useState(false);
     
@@ -142,6 +147,8 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
 
     // --- MODE PRIVASI LAYANAN BK ---
     const [counselingPrivacy, setCounselingPrivacy] = useState('mask');
+    const [signOptions, setSignOptions] = useState(SIGNER_OPTIONS_DEFAULT);
+    const toggleSignOpt = (key) => setSignOptions(p => ({ ...p, [key]: !p[key] }));
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -201,8 +208,73 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
     };
 
     // --- FUNGSI GENERATE WORD ---
-    const handleDownloadWord = () => {
+    const handleDownloadWordPasal = () => {
         if (!student || !pointData) return;
+        if (!ensureSignerNips(settings, signOptions)) return;
+        const st = hitungStatusPasal(pointData.logs, tataTertib?.pasal || [], tataTertib?.spRules || []);
+        const logs = [...pointData.logs].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const vLogs = logs.filter(l => l.type === 'violation');
+        const aLogs = logs.filter(l => l.type === 'achievement');
+        const tb = 'border-collapse: collapse; width: 100%;';
+        const td = 'border: 1px solid black; padding: 5px;';
+        const th = td + ' background-color: #f1f5f9; font-weight: bold; text-align: center;';
+        const c = 'text-align: center;';
+        const rowsOf = (arr, cells) => arr.length
+            ? arr.map((l, i) => `<tr>${cells(l, i)}</tr>`).join('')
+            : `<tr><td colspan="4" style="${td} ${c} font-style: italic;">Tidak ada catatan.</td></tr>`;
+        const spHtml = st.spTercapai
+            ? `<h4>STATUS SANKSI (BERBASIS PASAL)</h4>
+               <table style="${tb}"><tr><th style="${th}">Ambang SP Tercapai</th><th style="${th}">Tindakan</th><th style="${th}">Menuju SP Berikutnya</th></tr>
+               <tr><td style="${td} ${c} font-weight: bold;">${st.spTercapai.level}</td><td style="${td}">${st.spTercapai.tindakan || '-'}</td><td style="${td} ${c}">${st.menujuSp ? `${st.menujuSp.level}: kurang ${st.menujuSp.kurang}` : 'Tertinggi'}</td></tr></table>`
+            : (st.totalPelanggaran > 0
+                ? `<p><i>Belum mencapai ambang SP. ${st.menujuSp ? `Menuju ${st.menujuSp.level}: kurang ${st.menujuSp.kurang}.` : ''}</i></p>`
+                : '');
+
+        const htmlContent = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+            <head><meta charset="utf-8"><title>Buku Siswa ${student.name}</title></head>
+            <body style="font-family: Arial, sans-serif; font-size: 10pt;">
+                <h2 style="text-align: center; text-decoration: underline;">BUKU SISWA</h2>
+                <table style="width: 100%; margin-bottom: 12px;">
+                    <tr><td>Nama Siswa</td><td>: ${student.name}</td><td>Kelas</td><td>: ${student.class}</td></tr>
+                    <tr><td>NISN</td><td>: ${student.nisn || '-'}</td><td>Jenis Kelamin</td><td>: ${student.gender === 'L' ? 'Laki-laki' : 'Perempuan'}</td></tr>
+                    <tr><td>Wali Kelas</td><td>: ${student.homeroomTeacher || '-'}</td><td>Guru Wali</td><td>: ${student.guardianTeacher || '-'}</td></tr>
+                    <tr><td>Thn Ajaran</td><td colspan="3">: ${settings?.academicYear || '-'} / ${settings?.semester || '-'}</td></tr>
+                </table>
+                <h4>RINGKASAN</h4>
+                <table style="${tb}">
+                    <tr><th style="${th}">Pelanggaran Ringan</th><th style="${th}">Pelanggaran Sedang</th><th style="${th}">Pelanggaran Berat</th><th style="${th}">Prestasi</th></tr>
+                    <tr><td style="${td} ${c}">${st.raw.ringan}</td><td style="${td} ${c}">${st.efektif.sedang}</td><td style="${td} ${c}">${st.efektif.berat}</td><td style="${td} ${c}">${aLogs.length}</td></tr>
+                </table>
+                ${spHtml}
+                <h4 style="color: #b91c1c;">A. CATATAN PELANGGARAN</h4>
+                <table style="${tb}">
+                    <tr><th style="${th}">No</th><th style="${th}">Tanggal</th><th style="${th}">Uraian Pelanggaran</th><th style="${th}">Kategori</th></tr>
+                    ${rowsOf(vLogs, (l, i) => `<td style="${td} ${c}">${i + 1}</td><td style="${td} ${c}">${formatIndoDate(l.date)}</td><td style="${td}">${l.description}</td><td style="${td} ${c}">${KATEGORI_LABEL[l.kategori] || '-'}</td>`)}
+                </table>
+                <h4 style="color: #15803d;">B. CATATAN PRESTASI</h4>
+                <table style="${tb}">
+                    <tr><th style="${th}">No</th><th style="${th}">Tanggal</th><th style="${th}">Uraian Prestasi</th><th style="${th}">Bidang</th></tr>
+                    ${rowsOf(aLogs, (l, i) => `<td style="${td} ${c}">${i + 1}</td><td style="${td} ${c}">${formatIndoDate(l.date)}</td><td style="${td}">${l.description}</td><td style="${td} ${c}">${l.bidang || '-'}</td>`)}
+                </table>
+            ${signaturesWordHtml(settings, student, signOptions)}
+            </body>
+            </html>
+        `;
+        const blob = new Blob(['\ufeff', htmlContent], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Buku_Siswa_${student.name.replace(/\s+/g, '_')}.doc`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleDownloadWord = () => {
+        if (isPasal) return handleDownloadWordPasal();
+        if (!student || !pointData) return;
+        if (!ensureSignerNips(settings, signOptions)) return;
 
         const { violationTotal, achievementTotal, netScoreRaw, activeSanction, logs } = pointData;
         const displayScore = Math.abs(netScoreRaw);
@@ -325,7 +397,7 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
 
         let htmlContent = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-            <head><meta charset='utf-8'><title>Buku Poin ${student.name}</title></head>
+            <head><meta charset='utf-8'><title>Buku Siswa ${student.name}</title></head>
             <body style="font-family: 'Helvetica', 'Arial', sans-serif; font-size: 12px;">
                 
                 <div style="text-align: center; margin-bottom: 20px; border-bottom: 3px double black; padding-bottom: 10px;">
@@ -337,7 +409,7 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
                 </div>
 
                 <h3 style="text-align: center; text-decoration: underline; text-transform: uppercase; margin-bottom: 20px;">
-                    BUKU CATATAN POIN & PERILAKU SISWA
+                    BUKU CATATAN REKAM JEJAK SISWA
                 </h3>
 
                 <table style="width: 100%; margin-bottom: 20px; font-weight: bold;">
@@ -415,22 +487,7 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
                 ${counselingTableHTML}
 
                 <br/><br/>
-                <table style="width: 100%; border: none;">
-                    <tr>
-                        <td style="border: none; text-align: center; width: 50%;">
-                            <p>Mengetahui,<br/>Orang Tua / Wali</p>
-                            <br/><br/><br/>
-                            <p style="text-decoration: underline; font-weight: bold;">( ${student.parent ? student.parent : '....................................'} )</p>
-                        </td>
-                        <td style="border: none; text-align: center; width: 50%;">
-                            <p>${settings?.city || '...'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>Guru BK / Konselor</p>
-                            <br/><br/><br/>
-                            <p style="text-decoration: underline; font-weight: bold;">${settings?.counselor || '......................'}</p>
-                            <p>NIP. {settings?.nipCounselor || '......................'}</p>
-                        </td>
-                    </tr>
-                </table>
-
+            ${signaturesWordHtml(settings, student, signOptions)}
             </body>
             </html>
         `;
@@ -452,7 +509,7 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
             <div className="bg-white border-b px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4 sticky top-0 z-10 shadow-sm">
                 <div>
                     <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <BookOpen className="text-blue-600"/> Buku Poin Siswa
+                        <BookOpen className="text-blue-600"/> Buku Siswa
                     </h1>
                     <p className="text-xs text-slate-500">Lihat dan cetak rekam jejak karakter siswa.</p>
                 </div>
@@ -540,6 +597,15 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
                                         <input type="checkbox" className="w-4 h-4 accent-blue-600 rounded" checked={showCounselingHistory} onChange={e => setShowCounselingHistory(e.target.checked)} />
                                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1"><FileText size={14}/> Sertakan Riwayat BK</span>
                                     </label>
+                                    {[
+                                        { key: 'parent', label: 'Orang Tua/Wali' },
+                                        { key: 'counselor', label: 'Guru BK' },
+                                    ].map(o => (
+                                        <label key={o.key} className="flex items-center gap-2 cursor-pointer select-none bg-white px-3 py-1.5 rounded-lg border border-yellow-100 shadow-sm">
+                                            <input type="checkbox" className="w-4 h-4 accent-slate-700 rounded" checked={!!signOptions[o.key]} onChange={() => toggleSignOpt(o.key)} />
+                                            <span className="text-xs font-bold text-slate-700">TTD {o.label}</span>
+                                        </label>
+                                    ))}
                                 </div>
 
                                 {showCounselingHistory && (
@@ -572,6 +638,9 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
                                 showSanctionHistory={showSanctionHistory}
                                 showCounselingHistory={showCounselingHistory}
                                 sanctionRules={sanctionRules}
+                                isPasal={isPasal}
+                                tataTertib={tataTertib}
+                                signOptions={signOptions}
                             />
                         </div>
                     </div>
@@ -583,25 +652,17 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
                 )}
             </div>
 
-            <PrintPreviewModal 
-                isOpen={showPreview} 
-                onClose={() => setShowPreview(false)} 
-                title={`Buku Poin - ${student?.name || 'Siswa'}`}
-            >
-                {student && (
-                    <BookContent 
-                        student={student} 
-                        pointData={pointData} 
-                        counselingHistory={counselingHistory} 
-                        settings={settings}
-                        counselingPrivacy={counselingPrivacy}
-                        showSanctionHistory={showSanctionHistory}
-                        showCounselingHistory={showCounselingHistory}
-                        sanctionRules={sanctionRules}
-                        isPrintVersion={true}
-                    />
-                )}
-            </PrintPreviewModal>
+            <PdfPreviewModal
+                isOpen={showPreview}
+                onClose={() => setShowPreview(false)}
+                title={`Buku Siswa - ${student?.name || 'Siswa'}`}
+                buildDoc={() => buildBukuSiswaPdf({
+                    student, pointData, counselingHistory, counselingPrivacy, settings,
+                    isPasal, tataTertib, signOptions, showSanctionHistory, showCounselingHistory
+                })}
+                fileName={`Buku_Siswa_${(student?.name || 'Siswa').replace(/\s+/g, '_')}.pdf`}
+                guard={() => student && ensureSignerNips(settings, signOptions)}
+            />
 
         </div>
     );
@@ -610,8 +671,71 @@ const StudentPointBook = ({ students, pointLogs, journals, settings, sanctionRul
 // ==========================================
 // 3. SUB-KOMPONEN: ISI BUKU (DOKUMEN HTML)
 // ==========================================
-const BookContent = ({ student, pointData, counselingHistory, settings, counselingPrivacy, showSanctionHistory, showCounselingHistory, sanctionRules, isPrintVersion = false }) => {
+// ----------------------------------------------------------------------------
+// BLOK TANDA TANGAN DINAMIS
+// Pilihan pejabat dikendalikan checkbox di halaman Buku Siswa.
+// ----------------------------------------------------------------------------
+// Buku Siswa diketahui orang tua/wali dan guru BK saja
+const SIGNER_OPTIONS_DEFAULT = { parent: true, counselor: true };
+
+const buildSignerItems = (settings, student, opts = {}) => {
+    const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    return [
+        opts.parent && { key: 'parent', title: 'Mengetahui,', role: 'Orang Tua / Wali', name: student?.parent || '....................................' },
+        opts.counselor && { key: 'counselor', title: `${settings?.city || '...'}, ${dateStr}`, role: 'Guru BK / Konselor', name: settings?.counselor || '......................', nip: settings?.nipCounselor || '......................' },
+    ].filter(Boolean);
+};
+
+// Buku Siswa: blok orang tua/wali dan guru BK berjajar dalam satu baris
+const layoutSignerRows = (items) => [items];
+
+const SignatureBlocks = ({ items }) => {
+    if (!items.length) return null;
+    const rows = layoutSignerRows(items);
+    return (
+        <div className="mt-12 text-center text-[10pt] signature-section break-inside-avoid">
+            {rows.map((row, ri) => (
+                <div key={ri} className="flex justify-center gap-8 mb-6">
+                    {row.map(it => (
+                        <div key={it.key} style={{ width: '42%' }}>
+                            <p>{it.title}</p>
+                            <p>{it.role}</p>
+                            <br/><br/><br/>
+                            {it.key === 'parent'
+                                ? <p className="font-bold underline">( {it.name} )</p>
+                                : <>
+                                    <p className="font-bold underline">{it.name}</p>
+                                    <p>NIP. {it.nip}</p>
+                                  </>}
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const signaturesWordHtml = (settings, student, opts = {}) => {
+    const items = buildSignerItems(settings, student, opts);
+    if (!items.length) return '';
+    const cellOf = (it, width) => `
+        <td style="border: none; text-align: center; width: ${width}; vertical-align: top;">
+            <p>${it.title}</p><p>${it.role}</p><br/><br/><br/>
+            ${it.key === 'parent'
+                ? `<p style="text-decoration: underline; font-weight: bold;">( ${it.name} )</p>`
+                : `<p style="text-decoration: underline; font-weight: bold;">${it.name}</p><p>NIP. ${it.nip}</p>`}
+        </td>`;
+    return layoutSignerRows(items).map(row => {
+        const cells = row.length === 1
+            ? `<td style="border: none; width: 25%;"></td>${cellOf(row[0], '50%')}<td style="border: none; width: 25%;"></td>`
+            : row.map(it => cellOf(it, '50%')).join('');
+        return `<table style="width: 100%; border: none; margin-top: 24px;"><tr>${cells}</tr></table>`;
+    }).join('');
+};
+
+const BookContent = ({ student, pointData, counselingHistory, settings, counselingPrivacy, showSanctionHistory, showCounselingHistory, sanctionRules, isPrintVersion = false, isPasal = false, tataTertib, signOptions = SIGNER_OPTIONS_DEFAULT }) => {
     const { violationTotal, achievementTotal, netScoreRaw, activeSanction, logs } = pointData;
+    const pasalStatus = isPasal ? hitungStatusPasal(logs, tataTertib?.pasal || [], tataTertib?.spRules || []) : null;
     const violationLogs = logs.filter(l => l.type === 'violation');
     const achievementLogs = logs.filter(l => l.type === 'achievement');
     const isDeficit = violationTotal > achievementTotal;
@@ -661,7 +785,7 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
             </div>
 
             <div className="text-center mb-8">
-                <h2 className="text-[12pt] font-bold underline uppercase tracking-wide">BUKU CATATAN POIN & PERILAKU SISWA</h2>
+                <h2 className="text-[12pt] font-bold underline uppercase tracking-wide">BUKU CATATAN REKAM JEJAK SISWA</h2>
             </div>
 
             {/* IDENTITAS SISWA (CLASS no-border-table DITAMBAHKAN) */}
@@ -674,7 +798,27 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
                 </tbody>
             </table>
 
-            {/* RINGKASAN POIN */}
+            {/* RINGKASAN (BERBASIS PASAL / POIN) */}
+            {isPasal ? (
+            <table className="w-full border-collapse border border-black mb-6 text-center text-[10pt]">
+                <thead>
+                    <tr className="bg-gray-100">
+                        <th className="border border-black p-2">Pelanggaran Ringan</th>
+                        <th className="border border-black p-2">Pelanggaran Sedang</th>
+                        <th className="border border-black p-2">Pelanggaran Berat</th>
+                        <th className="border border-black p-2">Prestasi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td className="border border-black p-2 font-bold text-red-600">{pasalStatus?.raw.ringan}</td>
+                        <td className="border border-black p-2 font-bold text-red-600">{pasalStatus?.efektif.sedang}</td>
+                        <td className="border border-black p-2 font-bold text-red-600">{pasalStatus?.efektif.berat}</td>
+                        <td className="border border-black p-2 font-bold text-green-600">{achievementLogs.length}</td>
+                    </tr>
+                </tbody>
+            </table>
+            ) : (
             <table className="w-full border-collapse border border-black mb-6 text-center text-[10pt]">
                 <thead>
                     <tr className="bg-gray-100">
@@ -691,9 +835,33 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
                     </tr>
                 </tbody>
             </table>
+            )}
 
-            {/* KETENTUAN SANKSI */}
-            {isDeficit && activeSanction && (
+            {/* STATUS SANKSI BERBASIS PASAL */}
+            {isPasal && pasalStatus && pasalStatus.totalPelanggaran > 0 && (
+                <div className="mb-6">
+                    <h3 className="font-bold text-[10pt] uppercase mb-1 text-red-700">Status Sanksi (Berbasis Pasal)</h3>
+                    <table className="w-full border-collapse border border-black text-[9pt]">
+                        <thead>
+                            <tr className="bg-red-50 text-center">
+                                <th className="border border-black p-1">Ambang SP Tercapai</th>
+                                <th className="border border-black p-1">Tindakan</th>
+                                <th className="border border-black p-1">Menuju SP Berikutnya</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td className="border border-black p-1 text-center font-bold">{pasalStatus.spTercapai ? pasalStatus.spTercapai.level : 'Belum mencapai SP'}</td>
+                                <td className="border border-black p-1">{pasalStatus.spTercapai ? (pasalStatus.spTercapai.tindakan || '-') : '-'}</td>
+                                <td className="border border-black p-1 text-center">{pasalStatus.menujuSp ? `${pasalStatus.menujuSp.level}: kurang ${pasalStatus.menujuSp.kurang}` : 'Tertinggi'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* KETENTUAN SANKSI (POIN) */}
+            {!isPasal && isDeficit && activeSanction && (
                 <div className="mb-6">
                     <h3 className="font-bold text-[10pt] uppercase mb-1 text-red-700">Tindak Lanjut & Sanksi Saat Ini</h3>
                     <table className="w-full border-collapse border border-black text-[9pt]">
@@ -708,7 +876,7 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
             )}
 
             {/* RIWAYAT SANKSI */}
-            {showSanctionHistory && (
+            {showSanctionHistory && !isPasal && (
                 <div className="mb-6">
                     <h3 className="font-bold text-[10pt] uppercase border-b border-black pb-1 mb-2 text-amber-700">Riwayat Perubahan Poin</h3>
                     <table className="w-full border-collapse border border-black text-[9pt]">
@@ -736,11 +904,11 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
                 <h3 className="font-bold text-[10pt] uppercase border-b border-black pb-1 mb-2 text-red-700">A. Catatan Pelanggaran</h3>
                 <table className="w-full border-collapse border border-black text-[9pt]">
                     <thead>
-                        <tr className="bg-slate-100 text-center"><th className="border border-black p-1 w-8">No</th><th className="border border-black p-1 w-24">Tanggal</th><th className="border border-black p-1">Uraian</th><th className="border border-black p-1 w-12">Poin</th></tr>
+                        <tr className="bg-slate-100 text-center"><th className="border border-black p-1 w-8">No</th><th className="border border-black p-1 w-24">Tanggal</th><th className="border border-black p-1">Uraian</th><th className="border border-black p-1 w-24">{isPasal ? 'Kategori' : 'Poin'}</th></tr>
                     </thead>
                     <tbody>
                         {violationLogs.length>0 ? violationLogs.map((log,i)=>(
-                            <tr key={log.id}><td className="border border-black p-1 text-center">{i+1}</td><td className="border border-black p-1 text-center">{formatIndoDate(log.date)}</td><td className="border border-black p-1">{log.description}</td><td className="border border-black p-1 text-center font-bold text-red-600">{log.value}</td></tr>
+                            <tr key={log.id}><td className="border border-black p-1 text-center">{i+1}</td><td className="border border-black p-1 text-center">{formatIndoDate(log.date)}</td><td className="border border-black p-1">{log.description}</td><td className="border border-black p-1 text-center font-bold text-red-600">{isPasal ? (KATEGORI_LABEL[log.kategori] || '-') : log.value}</td></tr>
                         )) : <tr><td colSpan="4" className="border border-black p-2 text-center italic">Nihil.</td></tr>}
                     </tbody>
                 </table>
@@ -751,11 +919,11 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
                 <h3 className="font-bold text-[10pt] uppercase border-b border-black pb-1 mb-2 text-green-700">B. Catatan Prestasi</h3>
                 <table className="w-full border-collapse border border-black text-[9pt]">
                     <thead>
-                        <tr className="bg-slate-100 text-center"><th className="border border-black p-1 w-8">No</th><th className="border border-black p-1 w-24">Tanggal</th><th className="border border-black p-1">Uraian</th><th className="border border-black p-1 w-12">Poin</th></tr>
+                        <tr className="bg-slate-100 text-center"><th className="border border-black p-1 w-8">No</th><th className="border border-black p-1 w-24">Tanggal</th><th className="border border-black p-1">Uraian</th><th className="border border-black p-1 w-24">{isPasal ? 'Bidang' : 'Poin'}</th></tr>
                     </thead>
                     <tbody>
                         {achievementLogs.length>0 ? achievementLogs.map((log,i)=>(
-                            <tr key={log.id}><td className="border border-black p-1 text-center">{i+1}</td><td className="border border-black p-1 text-center">{formatIndoDate(log.date)}</td><td className="border border-black p-1">{log.description}</td><td className="border border-black p-1 text-center font-bold text-green-600">{log.value}</td></tr>
+                            <tr key={log.id}><td className="border border-black p-1 text-center">{i+1}</td><td className="border border-black p-1 text-center">{formatIndoDate(log.date)}</td><td className="border border-black p-1">{log.description}</td><td className="border border-black p-1 text-center font-bold text-green-600">{isPasal ? (log.bidang || '-') : log.value}</td></tr>
                         )) : <tr><td colSpan="4" className="border border-black p-2 text-center italic">Nihil.</td></tr>}
                     </tbody>
                 </table>
@@ -811,22 +979,8 @@ const BookContent = ({ student, pointData, counselingHistory, settings, counseli
                 </div>
             )}
 
-            {/* TANDA TANGAN */}
-            <div className="grid grid-cols-2 gap-10 mt-12 text-center text-[10pt] signature-section break-inside-avoid">
-                <div>
-                    <p>Mengetahui,</p>
-                    <p>Orang Tua / Wali</p>
-                    <br/><br/><br/><br/>
-                    <p className="font-bold underline">( {student.parent || '....................................'} )</p>
-                </div>
-                <div>
-                    <p>{settings?.city || '...'}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                    <p>Guru BK / Konselor</p>
-                    <br/><br/><br/><br/>
-                    <p className="font-bold underline">{settings?.counselor || '......................'}</p>
-                    <p>NIP. {settings?.nipCounselor || '......................'}</p>
-                </div>
-            </div>
+            {/* TANDA TANGAN (DINAMIS) */}
+            <SignatureBlocks items={buildSignerItems(settings, student, signOptions)} />
         </div>
     );
 };

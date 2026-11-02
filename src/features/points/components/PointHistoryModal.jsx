@@ -1,14 +1,16 @@
+import { ensureSignerNips } from '../../../common/utils/signers';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     History, X, Calendar, Printer, Download, ChevronLeft, 
     FileText, ArrowUpDown, AlertOctagon, Clock, PenTool, FileImage, Save,
     RectangleVertical, RectangleHorizontal 
 } from 'lucide-react';
+import { KATEGORI_LABEL, hitungStatusPasal } from '../../../common/utils/tataTertib';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatIndoDate } from '../../../common/utils/helpers';
 
-const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanctionRules, onUpdateStudent }) => {
+const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanctionRules, onUpdateStudent, sanctionMode = 'poin', tataTertib, reportKind = 'all' }) => {
     const [previewUrl, setPreviewUrl] = useState(null);
     
     // --- OPSI CETAK DINAMIS ---
@@ -83,6 +85,12 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
     }, [student, pointLogs, sanctionRules]);
 
     const displayLogs = logsWithBalance;
+    // Laporan Buku Sanksi hanya memuat pelanggaran (prestasi tidak ikut dicetak)
+    const pdfRows = reportKind === 'pelanggaran' ? displayLogs.filter(l => l.type === 'violation')
+        : reportKind === 'prestasi' ? displayLogs.filter(l => l.type === 'achievement')
+        : displayLogs;
+    const reportTitle = reportKind === 'prestasi' ? 'LAPORAN RIWAYAT PRESTASI SISWA' : 'LAPORAN RIWAYAT PELANGGARAN DAN SANKSI';
+    const listRows = reportKind === 'prestasi' ? displayLogs.filter(l => l.type === 'achievement') : displayLogs;
 
     if (!isOpen || !student) return null;
 
@@ -145,8 +153,8 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
         // 3. JUDUL DOKUMEN
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12); 
-        doc.text('LAPORAN RIWAYAT & KRONOLOGI POIN', centerX, currentY, { align: 'center' });
-        doc.line(centerX - (doc.getTextWidth('LAPORAN RIWAYAT & KRONOLOGI POIN')/2), currentY + 1, centerX + (doc.getTextWidth('LAPORAN RIWAYAT & KRONOLOGI POIN')/2), currentY + 1);
+        doc.text(reportTitle, centerX, currentY, { align: 'center' });
+        doc.line(centerX - (doc.getTextWidth(reportTitle)/2), currentY + 1, centerX + (doc.getTextWidth(reportTitle)/2), currentY + 1);
 
         // 4. IDENTITAS SISWA (DINAMIS & SEIMBANG)
         currentY += 8;
@@ -186,6 +194,112 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
             margin: { left: margin, right: margin }
         });
 
+        if (reportKind === 'prestasi') {
+            const headStyle = { fillColor: [240, 253, 244], textColor: [21, 128, 61], fontStyle: 'bold', halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0], font: 'helvetica', cellPadding: 2 };
+            currentY = doc.lastAutoTable.finalY + 6;
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+            doc.text('A. REKAP PRESTASI', 14, currentY - 0);
+            const achievementRows = pdfRows;
+            if (sanctionMode === 'pasal') {
+                const perBidang = {};
+                achievementRows.forEach(r => { const k = r.bidang || '-'; perBidang[k] = (perBidang[k] || 0) + 1; });
+                const bidangBody = Object.entries(perBidang).sort((a, b) => a[0].localeCompare(b[0])).map(([b, n]) => [b, n]);
+                autoTable(doc, {
+                    startY: currentY + 2, head: [['Bidang', 'Jumlah']],
+                    body: bidangBody.length ? bidangBody : [['-', 0]],
+                    theme: 'grid', headStyles: headStyle, styles: { font: 'helvetica', fontSize: 9, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0] },
+                    columnStyles: { 0: { halign: 'left' } }, margin: { left: 14, right: 14 }
+                });
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+                doc.text(`Total prestasi: ${achievementRows.length}`, 14, doc.lastAutoTable.finalY + 3);
+                currentY = doc.lastAutoTable.finalY + 10;
+            } else {
+                const totalPoin = achievementRows.reduce((acc, r) => acc + (parseInt(r.value) || 0), 0);
+                autoTable(doc, {
+                    startY: currentY + 2, head: [['Total Poin Prestasi', 'Jumlah Catatan']],
+                    body: [[totalPoin, achievementRows.length]],
+                    theme: 'grid', headStyles: headStyle, styles: { font: 'helvetica', fontSize: 10, halign: 'center', fontStyle: 'bold', lineWidth: 0.1, lineColor: [0, 0, 0] },
+                    margin: { left: 14, right: 14 }
+                });
+                currentY = doc.lastAutoTable.finalY + 10;
+            }
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+            doc.text('B. KRONOLOGI PRESTASI', 14, currentY - 2);
+            autoTable(doc, {
+                startY: currentY,
+                head: [['No', 'Tanggal', 'Uraian Prestasi', sanctionMode === 'pasal' ? 'Bidang' : 'Poin']],
+                body: achievementRows.length
+                    ? achievementRows.map((r, i) => [i + 1, formatIndoDate(r.date), r.description || '-', sanctionMode === 'pasal' ? (r.bidang || '-') : (r.value ?? '-')])
+                    : [['-', '-', 'Belum ada catatan prestasi.', '-']],
+                theme: 'grid', headStyles: headStyle,
+                styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.5, valign: 'top', lineWidth: 0.1, lineColor: [0, 0, 0] },
+                columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 30, halign: 'center' }, 3: { cellWidth: 35, halign: 'center' } },
+                margin: { left: 14, right: 14 }
+            });
+        } else if (sanctionMode === 'pasal') {
+            const st = hitungStatusPasal(displayLogs, tataTertib?.pasal || [], tataTertib?.spRules || []);
+            const prestasiCount = displayLogs.filter(l => l.type === 'achievement').length;
+            const headStyle = { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0], font: 'helvetica', cellPadding: 2 };
+            const bodyStyle = { font: 'helvetica', fontSize: 10, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0], fontStyle: 'bold', cellPadding: 2 };
+            const pageW = doc.internal.pageSize.getWidth();
+
+            // A. RINGKASAN KATEGORI
+            currentY = doc.lastAutoTable.finalY + 5;
+            autoTable(doc, {
+                startY: currentY,
+                head: reportKind === 'pelanggaran'
+                    ? [['Pelanggaran Ringan', 'Pelanggaran Sedang', 'Pelanggaran Berat']]
+                    : [['Pelanggaran Ringan', 'Pelanggaran Sedang', 'Pelanggaran Berat', 'Prestasi']],
+                body: reportKind === 'pelanggaran'
+                    ? [[st.raw.ringan, st.efektif.sedang, st.efektif.berat]]
+                    : [[st.raw.ringan, st.efektif.sedang, st.efektif.berat, prestasiCount]],
+                theme: 'grid', headStyles: headStyle, bodyStyles: bodyStyle,
+                margin: { left: margin, right: margin }
+            });
+            currentY = doc.lastAutoTable.finalY + 10;
+
+            // B. STATUS SANKSI BERBASIS PASAL
+            if (st.totalPelanggaran > 0) {
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                doc.text('A. STATUS SANKSI', margin, currentY - 3);
+                autoTable(doc, {
+                    startY: currentY,
+                    head: [['Ambang SP Tercapai', 'Tindakan', 'Menuju SP Berikutnya']],
+                    body: [[
+                        st.spTercapai ? st.spTercapai.level : 'Belum mencapai SP',
+                        st.spTercapai ? (st.spTercapai.tindakan || '-') : '-',
+                        st.menujuSp ? `${st.menujuSp.level}: kurang ${st.menujuSp.kurang}` : 'Tertinggi'
+                    ]],
+                    theme: 'grid',
+                    headStyles: { ...headStyle, fillColor: [254, 242, 242], textColor: [185, 28, 28] },
+                    bodyStyles: { ...bodyStyle, fontSize: 9, fontStyle: 'normal' },
+                    margin: { left: margin, right: margin }
+                });
+                currentY = doc.lastAutoTable.finalY + 10;
+            } else {
+                currentY = doc.lastAutoTable.finalY + 10;
+            }
+
+            // C. TRACK RECORD (KRONOLOGI)
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+            doc.text('C. RIWAYAT PELANGGARAN', margin, currentY - 3);
+            autoTable(doc, {
+                startY: currentY,
+                head: [['No', 'Tanggal', 'Uraian', 'Kategori / Bidang', 'Jenis']],
+                body: pdfRows.map((log, i) => [
+                    i + 1,
+                    formatIndoDate(log.date),
+                    log.description,
+                    log.type === 'violation' ? (KATEGORI_LABEL[log.kategori] || '-') : (log.bidang || '-'),
+                    log.type === 'violation' ? 'Pelanggaran' : 'Prestasi'
+                ]),
+                theme: 'grid',
+                headStyles: headStyle,
+                styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.5, valign: 'top', lineWidth: 0.1, lineColor: [0, 0, 0] },
+                columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 30, halign: 'center' }, 3: { cellWidth: 35, halign: 'center' }, 4: { cellWidth: 28, halign: 'center' } },
+                margin: { left: margin, right: margin }
+            });
+        } else {
         // 5. RINGKASAN
         currentY = doc.lastAutoTable.finalY + 5;
         autoTable(doc, {
@@ -233,7 +347,7 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
         doc.setFontSize(10); doc.setFont('helvetica', 'bold');
         doc.text("B. KRONOLOGI PERUBAHAN POIN", margin, currentY - 3);
         
-        const tableRows = displayLogs.map((log, index) => {
+        const tableRows = pdfRows.map((log, index) => {
             const isViolation = log.type === 'violation';
             const categoryLabel = isViolation ? 'PELANGGARAN' : 'PRESTASI';
             return [index + 1, formatIndoDate(log.date), `${categoryLabel}\n${log.description}`, (isViolation ? '+' : '-') + log.value, log.balanceSnapshot, log.sanctionSnapshot];
@@ -285,11 +399,13 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
             },
             columnStyles: tableColStyles,
             didParseCell: function(data) {
-                if (data.section === 'body' && data.column.index === 3) data.cell.styles.textColor = (displayLogs[data.row.index].type === 'violation') ? [220, 38, 38] : [22, 163, 74];
+                if (data.section === 'body' && data.column.index === 3) data.cell.styles.textColor = (pdfRows[data.row.index].type === 'violation') ? [220, 38, 38] : [22, 163, 74];
                 if (data.section === 'body' && data.column.index === 4) data.cell.styles.textColor = [37, 99, 235];
             },
             margin: { left: margin, right: margin }
         });
+
+        }
 
         // 8. TANDA TANGAN DINAMIS (POSISI MENYESUAIKAN LEBAR KERTAS)
         let finalY = doc.lastAutoTable.finalY + 15;
@@ -411,7 +527,8 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
     };
 
     const handlePreview = () => { try { const doc = createPDFDoc(); setPreviewUrl(URL.createObjectURL(doc.output('blob'))); } catch (error) { alert(`Gagal preview: ${error.message}`); } };
-    const handleDownload = () => { try { const doc = createPDFDoc(); doc.save(`Kronologi_Poin_${student.name.replace(/\s+/g, '_')}.pdf`); } catch (error) { alert(`Gagal download: ${error.message}`); } };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; try { const doc = createPDFDoc(); doc.save(`Kronologi_Poin_${student.name.replace(/\s+/g, '_')}.pdf`); } catch (error) { alert(`Gagal download: ${error.message}`); } };
     const toggleSign = (key) => setSignOptions(prev => ({ ...prev, [key]: !prev[key] }));
 
     return (
@@ -421,7 +538,7 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
                 <div>
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-3">
                         {previewUrl ? <FileText size={24} className="text-red-600"/> : <History size={24} className="text-blue-600"/>} 
-                        {previewUrl ? 'Pratinjau Dokumen PDF' : 'Riwayat & Kronologi Poin'}
+                        {previewUrl ? 'Pratinjau Dokumen PDF' : (reportKind === 'prestasi' ? 'Riwayat Prestasi Siswa' : (reportKind === 'pelanggaran' ? 'Riwayat Pelanggaran & Sanksi' : 'Track Record Siswa'))}
                     </h3>
                     <p className="text-sm text-slate-500 mt-1"><span className="font-bold text-slate-700">{student.name}</span> • {student.class} • Saldo: <span className="font-bold text-blue-600">{student.netScore}</span></p>
                 </div>
@@ -505,14 +622,14 @@ const PointHistoryModal = ({ isOpen, onClose, student, pointLogs, settings, sanc
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-slate-100 text-slate-600 font-bold uppercase text-xs border-b border-slate-200"><tr><th className="px-6 py-3 w-16 text-center">No</th><th className="px-6 py-3 w-32">Tanggal</th><th className="px-6 py-3">Keterangan</th><th className="px-6 py-3 text-center">Perubahan</th><th className="px-6 py-3 text-center">Saldo</th><th className="px-6 py-3 w-48">Status Sanksi</th></tr></thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {displayLogs.length > 0 ? displayLogs.map((log, idx) => {
+                                    {listRows.length > 0 ? listRows.map((log, idx) => {
                                         const isViolation = log.type === 'violation';
                                         return (
                                             <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                                 <td className="px-6 py-4 text-center text-slate-500">{idx + 1}</td>
                                                 <td className="px-6 py-4 font-medium">{formatIndoDate(log.date)}<div className="text-[10px] text-slate-400 mt-0.5">{log.createdAt ? new Date(log.createdAt).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) : ''}</div></td>
                                                 <td className="px-6 py-4"><div className={`text-[10px] font-bold uppercase mb-1 ${isViolation ? 'text-red-600' : 'text-green-600'}`}>{isViolation ? 'Pelanggaran' : 'Prestasi'}</div><div className="text-slate-700">{log.description}</div></td>
-                                                <td className="px-6 py-4 text-center"><span className={`font-bold px-2 py-1 rounded text-xs ${isViolation ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{isViolation ? '+' : '-'}{log.value}</span></td>
+                                                <td className="px-6 py-4 text-center"><span className={`font-bold px-2 py-1 rounded text-xs ${isViolation ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{sanctionMode === 'pasal' ? (isViolation ? (KATEGORI_LABEL[log.kategori] || '-') : (log.bidang || '-')) : <>{isViolation ? '+' : '-'}{log.value}</>}</span></td>
                                                 <td className="px-6 py-4 text-center"><span className="font-bold text-blue-600 text-base">{log.balanceSnapshot}</span></td>
                                                 <td className="px-6 py-4">{log.sanctionSnapshot !== '-' ? (<span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-100 rounded text-xs font-bold"><AlertOctagon size={12}/> {log.sanctionSnapshot}</span>) : (<span className="text-slate-400 italic text-xs">-</span>)}</td>
                                             </tr>

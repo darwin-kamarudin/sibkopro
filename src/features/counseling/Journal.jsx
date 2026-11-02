@@ -361,7 +361,7 @@ const Journal = ({ students, journals, onAdd, onUpdate, onDelete, settings }) =>
                 </div>
 
                 <div className="space-y-4 pb-24 md:pb-10">
-                    {journals.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).map(j => (
+                    {[...journals].sort((a,b) => ((b.createdAtMs ?? (b.createdAt?.seconds || 0) * 1000) - (a.createdAtMs ?? (a.createdAt?.seconds || 0) * 1000))).map(j => (
                         <div key={j.id} className={`bg-white border rounded-2xl p-5 transition-all hover:shadow-lg hover:border-blue-200 group relative ${editingId === j.id ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-200'}`}>
                             
                             <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

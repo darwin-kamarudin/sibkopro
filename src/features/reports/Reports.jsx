@@ -1,21 +1,27 @@
 import React, { useState, useMemo } from 'react';
 import { 
     Printer, Users, BookOpen, Map, FileText, FileCheck, 
-    ChevronRight, ChevronDown, Eye, Search, X, Info
+    ChevronRight, ChevronDown, Eye, Search, X, Info, Layers
 } from 'lucide-react';
+import { LAYANAN_TYPES } from '../../common/utils/constants';
 import { formatIndoDate } from '../../common/utils/helpers';
 
 // IMPORT KOMPONEN
 import { PrintPreviewModal, MONTH_NAMES, getAcademicPeriod } from './components/ReportShared';
-import { JournalReportModal, ClassReportModal, ServiceProofModal } from './components/ActivityReports';
-import { IndividualReportModal, RiskMapReportModal } from './components/StudentReports';
+import { JournalReportModal, ServiceProofModal } from './components/ActivityReports';
+import { PeriodRangePicker } from './components/PeriodRange';
+import { RiskMapReportModal } from './components/StudentReports';
+import CounselingHistoryModal from '../counseling/components/CounselingHistoryModal';
+import { ServiceReportModal } from './components/ServiceReportModal';
 
 const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }) => {
     const [activeTab, setActiveTab] = useState('journal');
-    const [modals, setModals] = useState({ journal: false, classReport: false, serviceProof: false, individual: false, riskMap: false });
+    const [modals, setModals] = useState({ journal: false, classReport: false, serviceType: false, serviceProof: false, individual: false, riskMap: false });
+    const [selectedServiceType, setSelectedServiceType] = useState(LAYANAN_TYPES[0]);
 
     // --- FILTER STATE ---
-    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+    const [rangeFrom, setRangeFrom] = useState({ month: new Date().getMonth(), year: new Date().getFullYear() });
+    const [rangeTo, setRangeTo] = useState({ month: new Date().getMonth(), year: new Date().getFullYear() });
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [filterClass, setFilterClass] = useState(''); 
     const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -61,16 +67,16 @@ const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }
 
     const REPORT_TYPES = [
         { id: 'journal', label: 'Jurnal Bulanan', icon: BookOpen, desc: 'Laporan aktivitas harian' },
-        { id: 'classReport', label: 'Laporan Klasikal', icon: Users, desc: 'Rekap bimbingan kelas' },
-        { id: 'individual', label: 'Rekam Jejak', icon: FileText, desc: 'History layanan per siswa' },
+        { id: 'individual', label: 'Riwayat Konseling', icon: FileText, desc: 'Daftar layanan konseling per siswa' },
         { id: 'riskMap', label: 'Peta Kerawanan', icon: Map, desc: 'Analisis tingkat resiko' },
+        { id: 'serviceType', label: 'Laporan per Layanan', icon: Layers, desc: 'Rekap per jenis layanan' },
         { id: 'serviceProof', label: 'Bukti Layanan', icon: FileCheck, desc: 'Dokumen fisik (LPL)' },
     ];
 
     // --- RENDER FILTER FORM ---
     const renderFilterForm = () => {
         const currentType = REPORT_TYPES.find(t => t.id === activeTab);
-        const { semester, academicYear } = getAcademicPeriod(selectedMonth, selectedYear);
+        const { semester, academicYear } = getAcademicPeriod(rangeFrom.month, rangeFrom.year);
         
         return (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -82,46 +88,28 @@ const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }
 
                     <div className="grid grid-cols-1 gap-6 mb-6">
                         {/* INPUTS FOR JOURNAL & CLASS REPORT */}
-                        {(activeTab === 'journal' || activeTab === 'classReport') && (
+                        {(activeTab === 'journal' || activeTab === 'serviceType') && (
                             <>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Bulan</label>
-                                        <div className="relative">
-                                            <select className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}>
-                                                {MONTH_NAMES.map((m, idx) => (<option key={idx} value={idx}>{m}</option>))}
-                                            </select>
-                                            <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16}/>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Tahun</label>
-                                        <div className="relative">
-                                            <select className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}>
-                                                {dynamicYearOptions.map((y) => (<option key={y} value={y}>{y}</option>))}
-                                            </select>
-                                            <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16}/>
-                                        </div>
-                                    </div>
-                                </div>
+                                <PeriodRangePicker from={rangeFrom} to={rangeTo} onChange={({ from: f, to: t }) => { setRangeFrom(f); setRangeTo(t); }} />
                                 <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg flex flex-col gap-1 text-xs text-blue-800">
                                     <div className="font-bold flex items-center gap-2"><Info size={14}/> Info Periode Laporan:</div>
                                     <div>Semester: <b>{semester}</b></div>
                                     <div>Tahun Pelajaran: <b>{academicYear}</b></div>
                                 </div>
-                                {activeTab === 'classReport' && (
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Filter Kelas (Opsional)</label>
-                                        <div className="relative">
-                                            <select className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-                                                <option value="">-- Semua Kelas --</option>
-                                                {uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                            <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16}/>
-                                        </div>
-                                    </div>
-                                )}
                             </>
+                        )}
+
+                        {/* INPUTS FOR SERVICE TYPE */}
+                        {activeTab === 'serviceType' && (
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Jenis Layanan</label>
+                                <div className="relative">
+                                    <select className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={selectedServiceType} onChange={e => setSelectedServiceType(e.target.value)}>
+                                        {LAYANAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-3 text-slate-400 pointer-events-none" size={16}/>
+                                </div>
+                            </div>
                         )}
 
                         {/* INPUTS FOR INDIVIDUAL */}
@@ -136,7 +124,7 @@ const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }
                                 {isStudentDropdownOpen && studentSearch && !selectedStudentId && (
                                     <div className="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto">
                                         {filteredStudents.length > 0 ? (filteredStudents.map(s => (
-                                            <div key={s.id} className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0" onClick={() => { setSelectedStudentId(s.id); setStudentSearch(`${s.name} (${s.class})`); setIsStudentDropdownOpen(false); }}>
+                                            <div key={s.id} className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0" onClick={() => { setSelectedStudentId(s.id); setModals(prev => ({ ...prev, individual: true })); setStudentSearch(`${s.name} (${s.class})`); setIsStudentDropdownOpen(false); }}>
                                                 <div className="font-bold text-slate-700">{s.name}</div>
                                                 <div className="text-xs text-slate-500">{s.class} | {s.nisn}</div>
                                             </div>
@@ -270,20 +258,19 @@ const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }
                 isOpen={modals.journal} 
                 onClose={() => handleCloseModal('journal')} 
                 journals={journals} 
-                selectedMonth={selectedMonth} 
-                selectedYear={selectedYear} 
+                rangeFrom={rangeFrom}
+                rangeTo={rangeTo} 
                 settings={settings}
             />
             
-            <ClassReportModal 
-                isOpen={modals.classReport} 
-                onClose={() => handleCloseModal('classReport')} 
-                journals={journals} 
-                students={students}  
-                selectedMonth={selectedMonth} 
-                selectedYear={selectedYear} 
-                filterClass={filterClass} 
-                settings={settings} 
+            <ServiceReportModal
+                isOpen={modals.serviceType}
+                onClose={() => handleCloseModal('serviceType')}
+                journals={journals}
+                rangeFrom={rangeFrom}
+                rangeTo={rangeTo}
+                initialServiceType={selectedServiceType}
+                settings={settings}
             />
 
             <ServiceProofModal 
@@ -294,13 +281,12 @@ const Reports = ({ journals = [], students = [], pointLogs = [], settings = {} }
                 settings={settings} 
             />
             
-            <IndividualReportModal 
-                isOpen={modals.individual} 
-                onClose={() => handleCloseModal('individual')} 
-                journals={journals} 
-                students={students} 
-                studentId={selectedStudentId} 
-                settings={settings} 
+            <CounselingHistoryModal
+                isOpen={modals.individual}
+                onClose={() => handleCloseModal('individual')}
+                student={students.find(s => s.id === selectedStudentId) || null}
+                journals={journals}
+                settings={settings}
             />
 
             <RiskMapReportModal 

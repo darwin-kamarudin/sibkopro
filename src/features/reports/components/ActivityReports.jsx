@@ -1,3 +1,5 @@
+import { ensureSignerNips } from '../../../common/utils/signers';
+import { inRange, normalizeRange, rangeLabel, rangeFileTag, PeriodRangePicker } from './PeriodRange';
 import React, { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -12,10 +14,10 @@ import { PrintPreviewModal, MONTH_NAMES, getAcademicPeriod, KopSurat, SignatureS
 // ============================================================================
 // 1. MODAL LAPORAN JURNAL (VERSI FINAL - BK & KEPSEK)
 // ============================================================================
-export const JournalReportModal = ({ isOpen, onClose, journals = [], selectedMonth, selectedYear, settings }) => {
+export const JournalReportModal = ({ isOpen, onClose, journals = [], rangeFrom, rangeTo, settings }) => {
     const [previewUrl, setPreviewUrl] = useState(null);
-    const [localMonth, setLocalMonth] = useState(selectedMonth);
-    const [localYear, setLocalYear] = useState(selectedYear);
+    const [localFrom, setLocalFrom] = useState(rangeFrom);
+    const [localTo, setLocalTo] = useState(rangeTo);
     const [showLetterhead, setShowLetterhead] = useState(true);
     const [orientation, setOrientation] = useState('portrait'); 
     const [paperSize, setPaperSize] = useState('a4'); 
@@ -23,33 +25,33 @@ export const JournalReportModal = ({ isOpen, onClose, journals = [], selectedMon
     
     const [signOptions, setSignOptions] = useState({ counselor: true, principal: true });
 
+    // Dependensi primitif agar tidak reset setiap render induk
+    const fm = rangeFrom.month, fy = rangeFrom.year, tm = rangeTo.month, ty = rangeTo.year;
     useEffect(() => {
         if (isOpen) {
-            setLocalMonth(selectedMonth);
-            setLocalYear(selectedYear);
+            setLocalFrom({ month: fm, year: fy });
+            setLocalTo({ month: tm, year: ty });
             setSignOptions({ counselor: true, principal: true });
             setPrivacyMode(false);
         } else {
             setPreviewUrl(null);
         }
-    }, [isOpen, selectedMonth, selectedYear]);
+    }, [isOpen, fm, fy, tm, ty]);
 
     useEffect(() => {
         if (isOpen) {
             const timer = setTimeout(() => handlePreview(), 100);
             return () => clearTimeout(timer);
         }
-    }, [isOpen, localMonth, localYear, showLetterhead, orientation, paperSize, signOptions, privacyMode]);
+    }, [isOpen, localFrom, localTo, showLetterhead, orientation, paperSize, signOptions, privacyMode]);
 
     useEffect(() => { return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }; }, [previewUrl]);
 
-    const { semester, academicYear } = getAcademicPeriod(localMonth, localYear);
-    const monthName = MONTH_NAMES[localMonth];
+    const { from, to } = normalizeRange(localFrom, localTo);
+    const { semester, academicYear } = getAcademicPeriod(from.month, from.year);
+    const periodText = rangeLabel(from, to);
     
-    const dataLogs = journals.filter(j => {
-        const d = new Date(j.date);
-        return d.getMonth() === localMonth && d.getFullYear() === localYear;
-    }).sort((a,b) => new Date(a.date) - new Date(b.date));
+    const dataLogs = journals.filter(j => inRange(j.date, from, to)).sort((a,b) => new Date(a.date) - new Date(b.date));
 
     const yearOptions = useMemo(() => {
         const currYear = new Date().getFullYear();
@@ -89,7 +91,7 @@ export const JournalReportModal = ({ isOpen, onClose, journals = [], selectedMon
         doc.line(centerX - 45, currentY + 1, centerX + 45, currentY + 1);
         currentY += 6;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-        doc.text(`Bulan: ${monthName} ${localYear}  |  Semester: ${semester} ${academicYear}`, centerX, currentY, { align: 'center' });
+        doc.text(`Periode: ${periodText}  |  Semester: ${semester} ${academicYear}`, centerX, currentY, { align: 'center' });
 
         currentY += 8;
         const tableBody = dataLogs.length > 0 ? dataLogs.map((j, i) => {
@@ -150,7 +152,8 @@ export const JournalReportModal = ({ isOpen, onClose, journals = [], selectedMon
     };
 
     const handlePreview = () => { try { const doc = createPDFDoc(); setPreviewUrl(URL.createObjectURL(doc.output('blob'))); } catch (e) { console.error(e); } };
-    const handleDownload = () => { try { const doc = createPDFDoc(); doc.save(`Jurnal_BK_${monthName}_${localYear}.pdf`); } catch (e) { alert(e.message); } };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; try { const doc = createPDFDoc(); doc.save(`Jurnal_BK_${rangeFileTag(from, to)}.pdf`); } catch (e) { alert(e.message); } };
     const toggleSign = (key) => { setSignOptions(p => ({ ...p, [key]: !p[key] })); };
 
     if (!isOpen) return null;
@@ -161,18 +164,13 @@ export const JournalReportModal = ({ isOpen, onClose, journals = [], selectedMon
                 <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
                     <div className="flex items-center gap-3">
                         <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Printer size={20}/></div>
-                        <div><h2 className="text-lg font-bold text-slate-800 leading-tight">Cetak Jurnal</h2><p className="text-xs text-slate-500">{monthName} {localYear}</p></div>
+                        <div><h2 className="text-lg font-bold text-slate-800 leading-tight">Cetak Jurnal</h2><p className="text-xs text-slate-500">{periodText}</p></div>
                     </div>
                     <button onClick={onClose} className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-full"><X size={24}/></button>
                 </div>
                 <div className="w-full lg:w-auto overflow-x-auto hide-scrollbar">
                     <div className="flex items-center gap-3 min-w-max mx-auto lg:mx-0 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                        <div className="flex bg-white rounded border border-slate-200 p-0.5 items-center">
-                            <div className="flex items-center px-2 text-slate-400"><Calendar size={14}/></div>
-                            <select className="bg-transparent text-xs font-bold text-slate-700 py-1.5 px-1 outline-none cursor-pointer hover:bg-slate-50 rounded" value={localMonth} onChange={(e) => setLocalMonth(parseInt(e.target.value))}>{MONTH_NAMES.map((m, idx) => (<option key={idx} value={idx}>{m}</option>))}</select>
-                            <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                            <select className="bg-transparent text-xs font-bold text-slate-700 py-1.5 px-1 pr-2 outline-none cursor-pointer hover:bg-slate-50 rounded" value={localYear} onChange={(e) => setLocalYear(parseInt(e.target.value))}>{yearOptions.map(y => (<option key={y} value={y}>{y}</option>))}</select>
-                        </div>
+                        <PeriodRangePicker compact from={localFrom} to={localTo} onChange={({ from: f, to: t }) => { setLocalFrom(f); setLocalTo(t); }} />
                         <div className="w-px h-6 bg-slate-300"></div>
                         <div className="flex bg-white rounded border border-slate-200 p-0.5"><button onClick={() => setPaperSize('a4')} className={`px-3 py-1.5 text-xs font-bold rounded ${paperSize === 'a4' ? 'bg-blue-100 text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>A4</button><button onClick={() => setPaperSize('f4')} className={`px-3 py-1.5 text-xs font-bold rounded ${paperSize === 'f4' ? 'bg-blue-100 text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>F4</button></div>
                         <div className="w-px h-6 bg-slate-300"></div>
@@ -352,7 +350,8 @@ export const ClassReportModal = ({ isOpen, onClose, journals = [], students = []
     };
 
     const handlePreview = () => { try { const doc = createPDFDoc(); setPreviewUrl(URL.createObjectURL(doc.output('blob'))); } catch (e) { console.error(e); } };
-    const handleDownload = () => { try { const doc = createPDFDoc(); doc.save(`Laporan_Klasikal_${monthName}_${localYear}.pdf`); } catch (e) { alert(e.message); } };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; try { const doc = createPDFDoc(); doc.save(`Laporan_Klasikal_${monthName}_${localYear}.pdf`); } catch (e) { alert(e.message); } };
     const toggleSign = (key) => { setSignOptions(p => ({ ...p, [key]: !p[key] })); };
 
     if (!isOpen) return null;
@@ -603,7 +602,8 @@ export const ServiceProofModal = ({ isOpen, onClose, journals = [], journalId, s
         return doc;
     };
 
-    const handleDownload = () => { if(j) createPDFDoc().save(`Bukti_Layanan_${j.studentName || 'Siswa'}.pdf`); };
+    const handleDownload = () => {
+        if (!ensureSignerNips(settings, signOptions)) return; if(j) createPDFDoc().save(`Bukti_Layanan_${j.studentName || 'Siswa'}.pdf`); };
     const toggleSign = (key) => { setSignOptions(p => ({ ...p, [key]: !p[key] })); };
 
     if (!isOpen) return null;

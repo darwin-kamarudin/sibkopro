@@ -3,10 +3,11 @@ import {
     X, Search, ChevronDown, Edit, Trash2, 
     RefreshCcw, PlusCircle, AlertTriangle, Trophy, Calendar, Clock, GripVertical
 } from 'lucide-react';
+import { KATEGORI_LABEL } from '../../../common/utils/tataTertib';
 
 const PointInputModal = ({ 
     isOpen, onClose, student, activeTab, setActiveTab,
-    masterPoints, pointLogs, onSubmit, onUpdate, onDelete 
+    masterPoints, pointLogs, onSubmit, onUpdate, onDelete, sanctionMode 
 }) => {
     // --- STATE FORM ---
     // Note: 'description' tetap ada di state untuk menampung hasil pilihan dropdown, tapi tidak ada input manualnya.
@@ -134,7 +135,14 @@ const PointInputModal = ({
             studentName: student.name,
             class: student.class,
             date: formData.date,
-            code: formData.code
+            code: formData.code,
+            basis: isPasalMode ? 'pasal' : 'poin',
+            // Mode pasal: simpan kategori/bidang sebagai pengganti poin
+            ...(isPasalMode && selectedOpt ? (
+                activeTab === 'violation'
+                    ? { kategori: selectedOpt.kategori || null }
+                    : { bidang: selectedOpt.bidang || null }
+            ) : {})
         };
 
         if (editingLogId) {
@@ -147,7 +155,11 @@ const PointInputModal = ({
         resetForm();
     };
 
-    if (!isOpen || !student) return null;
+    const isPasalMode = sanctionMode === 'pasal';
+  const fieldLabel = isPasalMode ? (activeTab === 'violation' ? 'Kategori Pelanggaran' : 'Bidang') : 'Nilai Poin';
+  const selectedOpt = (masterPoints || []).find(m => m.type === activeTab && String(m.code) === String(formData.code));
+
+  if (!isOpen || !student) return null;
 
     return (
         <div className="fixed inset-0 z-[60] flex justify-end">
@@ -251,7 +263,7 @@ const PointInputModal = ({
                                                         <span className="text-[10px] font-bold text-slate-400 block mb-0.5">Kode: {opt.code}</span>
                                                         <p className="text-sm text-slate-700 font-medium">{opt.label}</p>
                                                     </div>
-                                                    <div className={`font-bold text-xs px-2 py-1 h-fit rounded ${activeTab === 'violation' ? 'text-red-600 bg-red-100' : 'text-green-600 bg-green-100'}`}>{opt.point} Poin</div>
+                                                    <div className={`font-bold text-xs px-2 py-1 h-fit rounded ${activeTab === 'violation' ? 'text-red-600 bg-red-100' : 'text-green-600 bg-green-100'}`}>{sanctionMode === 'pasal' ? (activeTab === 'violation' ? (KATEGORI_LABEL[opt.kategori] || '-') : (opt.bidang || '-')) : `${opt.point} Poin`}</div>
                                                 </div>
                                             )) : <div className="p-4 text-center text-xs text-slate-400">Tidak ditemukan.</div>}
                                         </div>
@@ -261,8 +273,12 @@ const PointInputModal = ({
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Nilai Poin</label>
-                                    <input type="number" className="w-full p-3 border border-slate-300 rounded-xl font-bold text-center focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50" value={formData.value} onChange={e => setFormData({...formData, value: e.target.value})}/>
+                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">{fieldLabel}</label>
+                                    {isPasalMode ? (
+                                        <div className="w-full p-3 border border-slate-300 rounded-xl font-bold text-center bg-slate-100 text-slate-700">{selectedOpt ? (activeTab === 'violation' ? (KATEGORI_LABEL[selectedOpt.kategori] || '-') : (selectedOpt.bidang || '-')) : '-'}</div>
+                                    ) : (
+                                        <input type="number" className="w-full p-3 border border-slate-300 rounded-xl font-bold text-center focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50" value={formData.value} onChange={e => setFormData({...formData, value: e.target.value})}/>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Tanggal Kejadian</label>
@@ -288,7 +304,7 @@ const PointInputModal = ({
                         {/* HISTORY LIST */}
                         <div>
                              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-2">
-                                 <Clock size={16}/> Riwayat Poin Siswa
+                                 <Clock size={16}/> Track Record Siswa
                              </h4>
                              <div className="space-y-3">
                                 {studentHistory.map(log => (
@@ -304,7 +320,7 @@ const PointInputModal = ({
                                                     </span>
                                                     <span className="text-xs text-slate-400 ml-2">{log.date}</span>
                                                 </div>
-                                                <span className="font-bold text-slate-800 text-sm">{log.value} Poin</span>
+                                                <span className="font-bold text-slate-800 text-sm">{isPasalMode ? (log.type === 'violation' ? (KATEGORI_LABEL[log.kategori] || '-') : (log.bidang || '-')) : `${log.value} Poin`}</span>
                                             </div>
                                             <p className="text-sm text-slate-700 mt-1 leading-snug font-medium">{log.description}</p>
                                             
